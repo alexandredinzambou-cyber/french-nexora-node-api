@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+*.log
+_srv_out.txt
+_srv_err.txt
+_test_*.js
+_verify_nox.js
+check.ps1
+nexora-node-api-main
+frenchnexoraAPI-main
+Content-Nexora-main

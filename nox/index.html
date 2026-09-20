@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOX — Streaming Premium</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+</head>
+<body>
+<!-- ===== PORTAIL DE CONNEXION (code d'accès via Telegram) ===== -->
+<div id="authGate" style="display:none">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <span class="auth-logo-badge"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></span>
+      <span class="font-display auth-title">NOX</span>
+    </div>
+
+    <!-- Écran 1 : saisie du code -->
+    <div class="auth-step" id="authStepLogin">
+      <h1 class="auth-head">Connexion</h1>
+      <p class="auth-sub">Saisis le code d'accès reçu du bot Telegram.<br>Pas de code ? Contacte l'administrateur sur Telegram.</p>
+      <form id="authForm" autocomplete="off">
+        <input class="auth-input" id="authCode" type="text" inputmode="text" placeholder="NOX-XXXX-XXXX" maxlength="14" aria-label="Code d'accès">
+        <p class="auth-error" id="authError" style="display:none"></p>
+        <button class="auth-btn" id="authSubmit" type="submit">Se connecter</button>
+      </form>
+      <p class="auth-help">Besoin d'un code ? Écris au bot Telegram : <b>/code</b> — la durée (3 jours, 1 mois, pour toujours) est validée par l'admin.</p>
+    </div>
+
+    <!-- Écran 2 : code invalide / expiré -->
+    <div class="auth-step" id="authStepDenied" style="display:none">
+      <div class="auth-denied-icon">⛔</div>
+      <h1 class="auth-head">Accès refusé</h1>
+      <p class="auth-sub" id="authDeniedMsg">Ce code est invalide ou a expiré.</p>
+      <p class="auth-contact">📨 Contacte l'administrateur sur Telegram pour obtenir un nouveau code&nbsp;: <b>/code</b></p>
+      <button class="auth-btn auth-btn-ghost" id="authRetry" type="button">Réessayer</button>
+    </div>
+
+    <!-- Écran 3 : connexion réussie -->
+    <div class="auth-step" id="authStepOk" style="display:none">
+      <div class="auth-ok-icon">✓</div>
+      <h1 class="auth-head">Bienvenue</h1>
+      <p class="auth-sub" id="authOkMsg">Connexion réussie.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== NAVBAR ===== -->
+<header id="nav">
+  <div style="max-width:1680px;margin:0 auto;padding:0 3.5rem;display:flex;align-items:center;justify-content:space-between;height:4.6rem">
+    <div style="display:flex;align-items:center;gap:2.6rem">
+      <a href="#" data-view="accueil" class="logo" style="display:flex;align-items:center;gap:.65rem;text-decoration:none;color:var(--txt)" aria-label="NOX Accueil">
+        <span style="width:2.15rem;height:2.15rem;border-radius:.7rem;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;box-shadow:0 8px 24px -6px rgba(124,92,255,.6)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+        </span>
+        <span class="font-display" style="font-size:1.25rem;font-weight:700;letter-spacing:.05em">NOX</span>
+      </a>
+      <nav id="navMenu">
+        <a class="nav-link active" href="#" data-view="accueil">Accueil</a>
+        <a class="nav-link" href="#films" data-view="films">Films</a>
+        <a class="nav-link" href="#series" data-view="series">Séries</a>
+        <a class="nav-link" href="#animes" data-view="animes">Animés</a>
+        <a class="nav-link" href="#dramas" data-view="dramas">Dramas</a>
+        <a class="nav-link" href="#nouveautes" data-view="nouveautes">Nouveautés</a>
+        <a class="nav-link" href="#vurecent" data-view="vurecent">Vu récemment</a>
+        <a class="nav-link" href="#maliste" data-view="maliste">Ma liste</a>
+      </nav>
+    </div>
+    <div style="display:flex;align-items:center;gap:.7rem;position:relative">
+      <button id="mobileMenuBtn" class="lg:hidden flex items-center justify-center w-10 h-10 rounded-full text-[var(--muted)] hover:text-[var(--txt)] hover:bg-white/10 transition" aria-label="Ouvrir le menu" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div id="searchWrap">
+        <button id="searchToggle" aria-label="Rechercher">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        </button>
+        <input id="searchInput" type="text" placeholder="Titres, genres, personnes…" autocomplete="off">
+      </div>
+      <div id="apiBadge" class="api-badge" title="État de l'API Content-Nexora">
+        <span class="api-dot" id="apiDot"></span><span id="apiBadgeTxt">Content-Nexora…</span>
+      </div>
+      <button class="icon-btn max-[420px]:hidden" aria-label="Notifications">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
+        <span style="position:absolute;top:.42rem;right:.48rem;width:.5rem;height:.5rem;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)"></span>
+      </button>
+      <button style="width:2.2rem;height:2.2rem;border-radius:.65rem;background:linear-gradient(135deg,#3A3F55,#1C2030);border:1px solid var(--line);cursor:pointer;transition:.3s" data-view="profil" aria-label="Profil"></button>
+      <div id="searchPanel" class="glass">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:.6rem">
+          <p style="font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)" id="srLabel">Suggestions</p>
+          <span id="srLoading"><span class="sr-spin"></span>Chargement</span>
+        </div>
+        <div id="srResults"></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ===== MENU MOBILE ===== -->
+<div id="mobileMenu">
+  <div id="mobileMenuBack"></div>
+  <div id="mobileMenuPanel" class="absolute right-0 top-0 bottom-0 w-[min(82vw,22rem)] pt-24 pb-8 px-6 flex flex-col overflow-y-auto glass border-l border-[var(--line)]">
+    <button id="mobileMenuClose" class="modal-close" style="position:absolute;top:1.1rem;right:1.1rem" aria-label="Fermer le menu">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <nav class="flex flex-col">
+      <a class="mobile-link" href="#" data-view="accueil">Accueil<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
+      <a class="mobile-link" href="#films" data-view="films">Films<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
+      <a class="mobile-link" href="#series" data-view="series">Séries<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
+      <a class="mobile-link" href="#animes" data-view="animes">Animés<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
+      <a class="mobile-link" href="#dramas" data-view="dramas">Dramas<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
+      <a class="mobile-link" href="#nouveautes" data-view="nouveautes">Nouveautés<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
+      <a class="mobile-link" href="#vurecent" data-view="vurecent">Vu récemment<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
+      <a class="mobile-link" href="#maliste" data-view="maliste">Ma liste<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
+      <a class="mobile-link" href="#profil" data-view="profil">Profil<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
+    </nav>
+    <div class="mt-auto pt-6 text-xs" style="color:var(--muted)">NOX — Streaming Premium</div>
+  </div>
+</div>
+
+<div id="view-accueil" class="view active">
+<!-- ===== HERO ===== -->
+<section id="hero">
+  <div class="hero-bg" id="heroBg" role="img" aria-label="Fond du titre en vedette"></div>
+  <div class="hero-veil"></div><div class="hero-veil-b"></div><div class="hero-veil-t"></div>
+  <div style="position:relative;z-index:5;max-width:1680px;margin:0 auto;padding:6.5rem 3.5rem 0;display:grid;grid-template-columns:1fr auto;gap:3rem;align-items:center;width:100%">
+    <div style="max-width:38rem">
+      <p class="hero-tag rise" style="animation-delay:.1s"><b></b><span id="heroKicker">Original NOX</span></p>
+      <h1 id="heroTitle" class="font-display rise" style="font-size:clamp(2.6rem,6vw,4.6rem);font-weight:700;line-height:1.02;margin:1.1rem 0 .9rem;letter-spacing:-.01em;animation-delay:.25s">LUMEN</h1>
+      <div class="meta-row rise" style="animation-delay:.4s;margin-bottom:1.1rem">
+        <span class="match" style="font-size:.85rem">97 % pour vous</span>
+        <span id="heroYear">2025</span><span>•</span><span id="heroDur">2 h 12 min</span><span>−</span>
+        <span class="chip" id="heroRating">16+</span>
+        <span class="chip" style="border-color:rgba(255,255,255,.3)">4K HDR</span><span>•</span><span>Dolby Atmos</span>
+      </div>
+      <p id="heroDesc" class="rise" style="color:var(--muted);font-size:1.02rem;line-height:1.65;font-weight:300;animation-delay:.55s;margin-bottom:1.7rem">Dans une cité où la lumière est devenue monnaie, une orpheline découvre qu'elle peut voler les souvenirs codés dans les photons — et que quelqu'un la traque depuis toujours.</p>
+      <div class="rise" style="display:flex;gap:.9rem;flex-wrap:wrap;animation-delay:.7s">
+        <button class="btn-hero btn-primary" id="heroPlay">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Regarder
+        </button>
+        <button class="btn-hero btn-ghost" id="heroMore">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8.6v.2"/></svg>Plus d'infos
+        </button>
+        <button class="btn-hero btn-ghost" id="heroLike" style="padding:.95rem 1.1rem" aria-label="Ajouter à Ma liste">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 21C7 16.5 3 13.2 3 9.4A4.6 4.6 0 0112 6a4.6 4.6 0 019 3.4c0 3.8-4 7.1-9 11.6z"/></svg>
+        </button>
+      </div>
+      <div class="dots" id="heroDots"></div>
+    </div>
+    <div style="position:relative" class="float">
+      <div class="hero-poster" id="heroPoster"><img id="heroPosterImg" src="" alt="Affiche du titre en vedette"></div>
+      <div class="badge-glass" style="position:absolute;top:1.1rem;right:-1.6rem;border-radius:12px;padding:.55rem .85rem;font-size:.72rem;font-weight:600;display:flex;gap:.45rem;align-items:center">
+        <span style="width:.45rem;height:.45rem;border-radius:50%;background:#7CE38B;box-shadow:0 0 10px #7CE38B"></span>#1 en France
+      </div>
+      <div class="badge-glass" style="position:absolute;bottom:2.2rem;left:-2.2rem;border-radius:12px;padding:.55rem .85rem;font-size:.72rem;color:var(--gold);font-weight:600">★ 8.7 IMDb</div>
+    </div>
+  </div>
+</section>
+<!-- ===== RANGÉES DE CONTENU ===== -->
+<main id="rows" style="position:relative;z-index:10"></main>
+
+<!-- Section slogan avec dépassement graphique -->
+<section style="position:relative;padding:5rem 3.5rem 4rem;overflow:visible">
+  <div style="position:absolute;right:-6rem;top:-4rem;width:26rem;height:26rem;border-radius:50%;background:radial-gradient(circle,rgba(124,92,255,.22),transparent 65%);filter:blur(30px);pointer-events:none"></div>
+  <p class="font-display" style="font-size:clamp(2.2rem,5.5vw,4.2rem);font-weight:700;line-height:1.08;letter-spacing:-.01em;max-width:60rem;position:relative">
+    Le cinéma,<br><span class="text-gradient">réinventé chaque nuit.</span>
+
+  </p>
+  <p style="color:var(--muted);margin-top:1.2rem;max-width:34rem;font-weight:300;line-height:1.7">NOX sélectionne pour vous chaque soir une programmation nouvelle, en 4K HDR et Dolby Atmos, sans publicité.</p>
+</section>
+
+</div><!-- /view-accueil -->
+
+<!-- ===== VUE FILMS ===== -->
+<div id="view-films" class="view">
+  <div class="page-head"><h1 class="page-title">Films</h1><p class="page-sub">Le catalogue NOX de longs métrages, du blockbuster au cinéma d'auteur, en 4K HDR et Dolby Atmos.</p></div>
+  <div class="filters" id="fFilms"></div>
+  <div class="grid-cat" id="gridFilms"></div>
+</div>
+
+<!-- ===== VUE SÉRIES ===== -->
+<div id="view-series" class="view">
+  <div class="page-head"><h1 class="page-title">Séries</h1><p class="page-sub">Séries originales NOX et exclusivités, saisons complètes, lecture en un clic.</p></div>
+  <div class="filters" id="fSeries"></div>
+  <div class="grid-cat" id="gridSeries"></div>
+</div>
+
+<!-- ===== VUE ANIMÉS ===== -->
+<div id="view-animes" class="view">
+  <div class="page-head"><h1 class="page-title">Animés</h1><p class="page-sub">Catalogue anime-sama — VF et VOSTFR, saisons complètes.</p></div>
+  <div class="cat-bar"><div style="position:relative;flex:1;max-width:22rem"><input class="cat-search" id="animeSearch" type="text" placeholder="Rechercher un animé…"></div><span class="cat-count" id="animeCount">anime-sama · hors ligne</span></div>
+  <div class="grid-cat" id="gridAnimes"></div>
+</div>
+
+<!-- ===== VUE DRAMAS ===== -->
+<div id="view-dramas" class="view">
+  <div class="page-head"><h1 class="page-title">Dramas</h1><p class="page-sub">Dramas ReelShort — épisodes courts, VF.</p></div>
+  <div class="cat-bar"><div style="position:relative;flex:1;max-width:22rem"><input class="cat-search" id="dramaSearch" type="text" placeholder="Rechercher un drama…"></div><select class="cat-sort" id="dramaSort" aria-label="Trier les dramas"><option value="reco">Tri : Recommandés</option><option value="recent">Tri : Derniers ajoutés</option><option value="az">Tri : A→Z</option><option value="ep">Tri : Nb d'épisodes</option></select><span class="cat-count" id="dramaCount">reelshort · hors ligne</span></div>
+  <div id="dramaShelfFilters" class="filters"></div>
+  <div id="dramaThemeFilters" class="filters"></div>
+  <div class="grid-cat" id="gridDramas"></div>
+  <div style="display:grid;place-items:center;padding:0 3.5rem 3rem">
+    <button id="dramaMore" class="more-btn" style="display:none">Voir plus</button>
+  </div>
+</div>
+
+<!-- ===== VUE NOUVEAUTÉS ===== -->
+<div id="view-nouveautes" class="view">
+  <div class="page-head"><h1 class="page-title">Nouveautés</h1><p class="page-sub">Titres ajoutés récemment — programmation renouvelée chaque nuit.</p></div>
+  <div class="filters" id="fNouv"></div>
+  <div class="grid-cat" id="gridNouv"></div>
+</div>
+
+<!-- ===== VUE VU RÉCEMMENT ===== -->
+<div id="view-vurecent" class="view">
+  <div class="page-head">
+    <h1 class="page-title">Vu récemment</h1>
+    <p class="page-sub">Films, séries, animés et dramas que vous avez commencés — reprenez la lecture où vous l'avez laissée.</p>
+  </div>
+  <div style="display:flex;justify-content:flex-end;padding:0 3.5rem;margin-bottom:1rem">
+    <button id="clearAllWatched" class="btn-hero btn-ghost" style="padding:.6rem 1.2rem;font-size:.82rem;display:none">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>
+      Tout effacer
+    </button>
+  </div>
+  <div class="grid-cat" id="gridVuRecent"></div>
+</div>
+
+<!-- ===== VUE MA LISTE ===== -->
+<div id="view-maliste" class="view">
+  <div class="page-head"><h1 class="page-title">Ma liste</h1><p class="page-sub">Les titres que vous avez enregistrés, prêts à être lus sur tous vos appareils.</p></div>
+  <div class="grid-cat" id="gridListe"></div>
+</div>
+
+<!-- ===== VUE PROFIL ===== -->
+<div id="view-profil" class="view">
+  <div class="page-head"><h1 class="page-title">Profil</h1></div>
+  <div class="pwrap">
+    <div class="pcard" id="profCard" style="display:flex;gap:1.6rem;align-items:center;flex-wrap:wrap">
+      <div class="avatar-xl" id="profAvatar">A</div>
+      <div style="flex:1;min-width:14rem">
+        <div id="profView">
+          <h2 id="profName" style="font-size:1.5rem;font-weight:700" class="font-display">Alex Rivière</h2>
+          <p id="profEmail" style="color:var(--muted);font-size:.88rem;margin-top:.3rem">alex.riviere@nox.tv • Abonnement Premium 4K</p>
+          <p style="color:var(--muted);font-size:.82rem;margin-top:.15rem">Membre depuis 2023 • Dernière activité : aujourd'hui</p>
+        </div>
+        <div id="profEdit" style="display:none;flex-direction:column;gap:.7rem;max-width:22rem">
+          <div>
+            <label class="prof-label" for="profNameInput">Nom affiché</label>
+            <input id="profNameInput" class="prof-input" type="text" maxlength="40">
+          </div>
+          <div style="margin-top:.7rem">
+            <label class="prof-label" for="profEmailInput">E-mail</label>
+            <input id="profEmailInput" class="prof-input" type="email" maxlength="60">
+          </div>
+        </div>
+      </div>
+      <div id="profViewActions">
+        <button class="btn-hero btn-ghost" id="profEditBtn" style="padding:.7rem 1.3rem;font-size:.85rem">Modifier le profil</button>
+      </div>
+      <div id="profEditActions" style="display:none;gap:.6rem">
+        <button class="btn-hero btn-primary" id="profSaveBtn" style="padding:.7rem 1.3rem;font-size:.85rem">Enregistrer</button>
+        <button class="btn-hero btn-ghost" id="profCancelBtn" style="padding:.7rem 1.3rem;font-size:.85rem">Annuler</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap">
+      <div class="stat"><b id="statWatch">0 h</b><span>temps de visionnage</span></div>
+      <div class="stat"><b id="statDone">0</b><span>titres terminés</span></div>
+      <div class="stat"><b id="statListe">0</b><span>titres dans Ma liste</span></div>
+      <div class="stat"><b id="statStarted">0</b><span>titres commencés</span></div>
+    </div>
+    <div class="pcard">
+      <h3 class="sec-title" style="font-size:1.02rem;margin-bottom:.5rem">Paramètres de lecture</h3>
+      <div class="set-row"><div><p>Épisode suivant automatique</p><small>Lance la saison suivante sans interruption</small></div><button class="toggle on" data-set="autoplay"><i></i></button></div>
+      <div class="set-row"><div><p>Lecture automatique des bandes-annonces</p><small>Aperçu sonore en navigation</small></div><button class="toggle" data-set="trailer"><i></i></button></div>
+      <div class="set-row"><div><p>Sous-titres par défaut</p><small>Français — activés à chaque lecture</small></div><button class="toggle" data-set="subs"><i></i></button></div>
+      <div class="set-row"><div><p>Qualité maximale</p><small>Selon la bande passante disponible</small></div><span class="badge-glass" style="border-radius:99px;padding:.45rem 1rem;font-size:.82rem">4K HDR</span></div>
+      <div class="set-row"><div><p>Mode nuit</p><small>Réduit luminosité et contraste automatiquement</small></div><button class="toggle" data-set="night"><i></i></button></div>
+    </div>
+    <div class="pcard">
+      <h3 class="sec-title" style="font-size:1.02rem;margin-bottom:1.2rem">Profils du compte</h3>
+      <div style="display:flex;gap:1.6rem;flex-wrap:wrap">
+        <button class="pchip"><div class="pav" style="background:linear-gradient(135deg,var(--accent),#5B3FD6)">A</div><span style="color:var(--txt)">Alex</span></button>
+        <button class="pchip"><div class="pav" style="background:linear-gradient(135deg,var(--accent2),#2A7DB8)">C</div><span>Camille</span></button>
+        <button class="pchip"><div class="pav" style="background:linear-gradient(135deg,var(--gold),#B8860B)">E</div><span>Enfants</span></button>
+        <button class="pchip"><div class="pav" style="background:rgba(255,255,255,.08);border:1px dashed var(--line)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div><span>Ajouter</span></button>
+      </div>
+    </div>
+    <div class="pcard">
+      <h3 class="sec-title" style="font-size:1.02rem;margin-bottom:.5rem">Connexion API Content-Nexora</h3>
+      <div class="set-row"><div><p>Serveur Content-Nexora</p><small>URL de base de l'API — laisser vide si le site est servi par le serveur d'API lui-même</small></div></div>
+      <input id="apiBaseInput" class="prof-input" type="text" placeholder="http://localhost:8787" style="margin:.2rem 0 1rem">
+      <div class="set-row"><div><p>Clé API TMDB (optionnelle)</p><small>Clé v3 themoviedb.org — utilisée uniquement comme secours si un titre n'est pas résolu par l'API</small></div></div>
+      <input id="apiTmdbInput" class="prof-input" type="password" placeholder="Clé API v3 TMDB" style="margin:.2rem 0 1rem">
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <button class="btn-hero btn-primary" id="apiSaveBtn" style="padding:.65rem 1.2rem;font-size:.85rem">Enregistrer</button>
+        <button class="btn-hero btn-ghost" id="apiTestBtn" style="padding:.65rem 1.2rem;font-size:.85rem">Tester la connexion</button>
+      </div>
+      <p id="apiStatus" style="color:var(--muted);font-size:.8rem;margin-top:.8rem"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== VUE DÉTAIL SÉRIE ===== -->
+<div id="view-seriedetail" class="view">
+  <div class="sd-hero">
+    <div class="sd-bg" id="sdBg"></div>
+    <div class="sd-veil"></div>
+    <button class="modal-close" id="sdBack" style="position:absolute;top:6.2rem;left:2rem;z-index:3" aria-label="Retour aux séries">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m6-7l-7 7 7 7"/></svg>
+    </button>
+    <div class="sd-content">
+      <div class="sd-poster"><img id="sdPoster" src="" alt=""></div>
+      <div class="sd-info">
+        <p class="hero-tag"><b></b><span>Original NOX — Série</span></p>
+        <h1 id="sdTitle" class="font-display"></h1>
+        <div class="meta-row" id="sdMeta" style="margin:.7rem 0 1rem"></div>
+        <p id="sdDesc"></p>
+        <div class="sd-cast" id="sdCast"></div>
+        <div style="display:flex;gap:.9rem;flex-wrap:wrap;margin-top:1.4rem">
+          <button class="btn-hero btn-primary" id="sdPlay">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Regarder
+          </button>
+          <button class="btn-hero btn-ghost" id="sdResume" style="display:none">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><span id="sdResumeLbl">Reprendre</span>
+          </button>
+          <button class="btn-hero btn-ghost" id="sdLike" aria-label="Ajouter à Ma liste">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 21C7 16.5 3 13.2 3 9.4A4.6 4.6 0 0112 6a4.6 4.6 0 019 3.4c0 3.8-4 7.1-9 11.6z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sd-body">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.2rem">
+      <h2 class="sec-title" style="font-size:1.1rem">Épisodes</h2>
+      <div class="filters" id="sdSeasons" style="padding:0"></div>
+    </div>
+    <div id="sdEpisodes" class="sd-episodes"></div>
+    <h3 class="sec-title" style="font-size:1.02rem;margin:2.6rem 0 1rem">Vous pourriez également aimer</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.7rem" id="sdSim"></div>
+  </div>
+</div>
+
+<!-- ===== VUE DÉTAIL ANIMÉ ===== -->
+<div id="view-animedetail" class="view">
+  <div class="sd-hero">
+    <div class="sd-bg" id="adBg"></div>
+    <div class="sd-veil"></div>
+    <button class="modal-close" id="adBack" style="position:absolute;top:6.2rem;left:2rem;z-index:3" aria-label="Retour aux animés">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m6-7l-7 7 7 7"/></svg>
+    </button>
+    <div class="sd-content">
+      <div class="sd-poster"><img id="adPoster" src="" alt=""></div>
+      <div class="sd-info">
+        <p class="hero-tag"><b></b><span>anime-sama</span></p>
+        <h1 id="adTitle" class="font-display"></h1>
+        <div class="meta-row" id="adMeta" style="margin:.7rem 0 1rem"></div>
+        <p id="adDesc"></p>
+        <div class="sd-cast" id="adTags"></div>
+        <div style="display:flex;gap:.9rem;flex-wrap:wrap;margin-top:1.4rem">
+          <button class="btn-hero btn-primary" id="adPlay">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Lecture
+          </button>
+          <button class="btn-hero btn-ghost" id="adResume" style="display:none">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><span id="adResumeLbl">Reprendre</span>
+          </button>
+          <button class="btn-hero btn-ghost" id="adLike" aria-label="Ajouter à Ma liste">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 21C7 16.5 3 13.2 3 9.4A4.6 4.6 0 0112 6a4.6 4.6 0 019 3.4c0 3.8-4 7.1-9 11.6z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sd-body">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.2rem">
+      <h2 class="sec-title" style="font-size:1.1rem">Épisodes</h2>
+      <div class="filters" id="adSeasons" style="padding:0"></div>
+    </div>
+    <div id="adEpisodes" class="sd-episodes"></div>
+  </div>
+</div>
+
+<!-- ===== VUE DÉTAIL DRAMA ===== -->
+<div id="view-dramadetail" class="view">
+  <div class="sd-hero">
+    <div class="sd-bg" id="ddBg"></div>
+    <div class="sd-veil"></div>
+    <button class="modal-close" id="ddBack" style="position:absolute;top:6.2rem;left:2rem;z-index:3" aria-label="Retour aux dramas">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m6-7l-7 7 7 7"/></svg>
+    </button>
+    <div class="sd-content">
+      <div class="sd-poster"><img id="ddPoster" src="" alt=""></div>
+      <div class="sd-info">
+        <p class="hero-tag"><b></b><span>ReelShort</span></p>
+        <h1 id="ddTitle" class="font-display"></h1>
+        <div class="meta-row" id="ddMeta" style="margin:.7rem 0 1rem"></div>
+        <p id="ddDesc"></p>
+        <div class="sd-cast" id="ddTags"></div>
+        <div style="display:flex;gap:.9rem;flex-wrap:wrap;margin-top:1.4rem">
+          <button class="btn-hero btn-primary" id="ddPlay">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Lecture
+          </button>
+          <button class="btn-hero btn-ghost" id="ddResume" style="display:none">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><span id="ddResumeLbl">Reprendre</span>
+          </button>
+          <button class="btn-hero btn-ghost" id="ddLike" aria-label="Ajouter à Ma liste">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 21C7 16.5 3 13.2 3 9.4A4.6 4.6 0 0112 6a4.6 4.6 0 019 3.4c0 3.8-4 7.1-9 11.6z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sd-body">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.2rem">
+      <h2 class="sec-title" style="font-size:1.1rem">Épisodes</h2><span id="ddCount" style="color:var(--muted);font-size:.8rem"></span>
+    </div>
+    <div id="ddEpisodes" class="sd-episodes"></div>
+  </div>
+</div>
+
+<!-- ===== MODAL DÉTAIL ===== -->
+<div id="modal" role="dialog" aria-modal="true">
+  <div class="modal-back" id="modalBack"></div>
+  <div class="modal-card">
+    <div class="modal-hero">
+      <img id="mHeroImg" src="" alt="">
+      <div class="sh"></div>
+      <button class="modal-close" id="modalClose" aria-label="Fermer">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+        <div>
+          <h2 id="mTitle" class="font-display" style="font-size:2rem;font-weight:700;letter-spacing:-.01em"></h2>
+          <div class="meta-row" style="margin-top:.65rem" id="mMeta"></div>
+        </div>
+        <div style="display:flex;gap:.7rem">
+          <button class="btn-hero btn-primary" id="mPlay" style="padding:.75rem 1.5rem;font-size:.88rem">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Regarder
+          </button>
+          <button class="btn-hero btn-ghost" id="mLike" style="padding:.75rem 1rem" aria-label="Ma liste">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 21C7 16.5 3 13.2 3 9.4A4.6 4.6 0 0112 6a4.6 4.6 0 019 3.4c0 3.8-4 7.1-9 11.6z"/></svg>
+          </button>
+        </div>
+      </div>
+      <p id="mDesc" style="color:var(--muted);line-height:1.7;font-weight:300;margin:1.2rem 0 1.4rem;max-width:46rem"></p>
+      <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.6rem" id="mCast"></div>
+      <h3 class="sec-title" style="font-size:1.02rem;margin-bottom:1rem">Vous pourriez également aimer</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.7rem" id="mSim"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="glass"><span id="toastTxt"></span></div>
+
+<!-- ===== ÉCRAN DE LECTURE ===== -->
+<div id="player">
+  <div class="pl-media" id="plBg"></div>
+  <video id="plVideo" class="pl-media" playsinline></video>
+  <iframe id="plIframe" title="Lecteur distant" allow="autoplay; fullscreen; encrypted-media" allowfullscreen style="display:none;position:absolute;inset:0;z-index:1;background:#000;border:0;width:100%;height:100%"></iframe>
+  <div class="pl-ui" id="plUi">
+    <div class="pl-top">
+      <button class="pl-back" id="plBack">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m6-7l-7 7 7 7"/></svg>
+        Retour
+      </button>
+      <div style="display:flex;align-items:center;gap:.7rem">
+        <button class="pl-badge pl-badge-btn" id="plQualityBtn" title="Qualité maximale (cliquer pour changer)">AUTO</button><span class="pl-badge">DOLBY ATMOS</span><button class="pl-badge pl-badge-btn" id="plSubsBtn" title="Sous-titres français par défaut">CC</button>
+      </div>
+    </div>
+    <div style="flex:1;display:grid;place-items:center;min-height:0">
+      <button class="pl-btn" id="plBig" style="width:6rem;height:6rem;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);backdrop-filter:blur(10px)">
+        <svg id="plBigIcon" width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+    </div>
+    <div class="pl-bottom">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap">
+        <div>
+          <h2 id="plTitle" class="font-display" style="font-size:1.6rem;font-weight:700"></h2>
+          <p id="plSub" style="color:rgba(255,255,255,.6);font-size:.85rem;margin-top:.25rem"></p>
+        </div>
+        <p style="color:rgba(255,255,255,.55);font-size:.82rem" id="plMatch">Disponible en 4K — lecture reprise automatiquement</p>
+      </div>
+      <div class="pl-bar" id="plBar"><i id="plFill"></i><b id="plKnob"></b></div>
+      <div class="pl-controls">
+        <button class="pl-btn" id="plPlay" aria-label="Lecture / pause">
+          <svg id="plPlayIcon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="pl-btn" id="plBack10" aria-label="Reculer de 10 s">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 109-9"/><path d="M3 3v6h6"/></svg>
+        </button>
+        <button class="pl-btn" id="plFwd10" aria-label="Avancer de 10 s">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-9-9"/><path d="M21 3v6h-6"/></svg>
+        </button>
+        <button class="pl-btn" id="plVol" aria-label="Volume">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>
+        </button>
+        <span class="pl-time" id="plTime">0:00 / 0:00</span>
+        <div style="flex:1"></div>
+        <button class="pl-badge pl-badge-btn" id="plSourcesBtn" style="display:none" title="Afficher / masquer les sources">SOURCES <b id="plSourcesCount" class="pl-src-count">0</b></button>
+        <button class="pl-badge pl-badge-btn" id="plRetryBtn" style="display:none" title="Relancer la recherche de flux">RECHERCHER</button>
+        <button class="pl-btn" id="plNext" aria-label="Épisode suivant">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5v14l8-7zM16 5h2v14h-2z"/></svg>
+        </button>
+        <button class="pl-btn" id="plFull" aria-label="Plein écran">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5"/></svg>
+        </button>
+        <button class="pl-btn pl-open-tab" id="plOpenTab" aria-label="Ouvrir dans un nouvel onglet" title="Ouvrir dans nouvel onglet">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div id="plNextWrap" class="pl-next-wrap" style="display:none">
+    <div class="pl-next glass">
+      <div>
+        <p id="plNextLabel" style="font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)">Épisode suivant</p>
+        <p id="plNextTitle" style="font-weight:600;margin-top:.2rem"></p>
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem">
+        <svg width="42" height="42" viewBox="0 0 42 42"><circle cx="21" cy="21" r="18" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="3"/><circle id="plNextRing" cx="21" cy="21" r="18" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-dasharray="113" stroke-dashoffset="0" transform="rotate(-90 21 21)"/></svg>
+        <b id="plNextSecs" style="font-size:1.4rem;font-weight:700">8</b>
+      </div>
+      <span id="plNextCount" style="display:none">8</span>
+      <button class="btn-hero btn-primary" id="plNextNow" style="padding:.55rem 1.1rem;font-size:.8rem">Lecture</button>
+      <button class="btn-hero btn-ghost" id="plNextCancel" style="padding:.55rem 1rem;font-size:.8rem">Annuler</button>
+    </div>
+  </div>
+  <div id="plNextHint" style="display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:18;padding:.7rem 1.3rem;border-radius:99px;background:rgba(8,9,14,.82);border:1px solid rgba(255,255,255,.18);font-size:.85rem;color:var(--txt);backdrop-filter:blur(8px);white-space:nowrap">Épisode terminé — ▶ pour relancer, ou choisissez une source</div>
+  <div id="plSources" class="pl-sources glass" role="dialog" aria-label="Sources disponibles"></div>
+  <button class="pl-sources-fab" id="plSourcesFab" style="display:none" title="Afficher les sources">▲ SOURCES</button>
+</div>
+
+<!-- ===== FOOTER ===== -->
+<footer>
+  <div style="max-width:1680px;margin:0 auto;display:flex;justify-content:space-between;gap:2.5rem;flex-wrap:wrap">
+    <div>
+      <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem">
+        <span style="width:1.8rem;height:1.8rem;border-radius:.55rem;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+        </span>
+        <span class="font-display" style="font-weight:700">NOX</span>
+      </div>
+      <p style="color:var(--muted);font-size:.85rem;max-width:22rem;font-weight:300;line-height:1.6">Plateforme de streaming nouvelle génération. Catalogue 4K, son spatialisé, zéro publicité.</p>
+    </div>
+    <div style="display:flex;gap:4rem;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:.55rem">
+        <p style="font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--txt);margin-bottom:.3rem">Explorer</p>
+        <a class="f-link" href="#films" data-view="films">Films</a><a class="f-link" href="#series" data-view="series">Séries</a><a class="f-link" href="#animes" data-view="animes">Animés</a><a class="f-link" href="#dramas" data-view="dramas">Dramas</a><a class="f-link" href="#nouveautes" data-view="nouveautes">Nouveautés</a><a class="f-link" href="#vurecent" data-view="vurecent">Vu récemment</a><a class="f-link" href="#maliste" data-view="maliste">Ma liste</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.55rem">
+        <p style="font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--txt);margin-bottom:.3rem">Aide</p>
+        <a class="f-link" href="#">Centre d'aide</a><a class="f-link" href="#">Appareils</a><a class="f-link" href="#">Nous contacter</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.55rem">
+        <p style="font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--txt);margin-bottom:.3rem">Légal</p>
+        <a class="f-link" href="#">Confidentialité</a><a class="f-link" href="#">Conditions</a><a class="f-link" href="#">Cookies</a>
+      </div>
+    </div>
+  </div>
+  <p style="max-width:1680px;margin:2.4rem auto 0;color:var(--muted);font-size:.78rem;opacity:.7">© 2025 NOX — Maquette concept. Tous les visuels sont des placeholders.</p>
+</footer>
+
+<script src="hls.min.js"></script>
+<script>window.Hls||document.write('<script src="https://cdn.jsdelivr.net/npm/hls.js@1"><\/script>');</script>
+<script src="script.js" defer></script>
+</body>
+</html>
