@@ -575,7 +575,7 @@ async function nxHealth(){
     // Vérifier si l'API peut fournir des données catalogue (TMDB configuré)
     if(apiState.online){
       try{
-        const catR=await fetch(nxUrl('/api/catalog/items?type=movie&limit=1'),{signal:AbortSignal.timeout(8000)});
+        const catR=await fetch(nxUrl('/api/catalog/items?type=movie&limit=1'),{signal:AbortSignal.timeout(30000)});
         if(catR.ok){
           const catData=await catR.json();
           apiState.tmdbReady=Array.isArray(catData)&&catData.length>0;
