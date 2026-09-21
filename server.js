@@ -76,6 +76,58 @@ async function handleAuthApi(pathname, searchParams, req, res) {
         return json(200, authPayload(st.rec));
     }
 
+    /* --- Administration distante (bot Telegram sur Railway) : /api/auth/admin ---
+       Le bot et le serveur sont dans des containers séparés : impossible d'écrire
+       directement _nox_auth.json. Le bot appelle donc ces endpoints avec un secret
+       partagé (AUTH_ADMIN_SECRET) pour synchroniser codes et sessions. */
+    if (pathname === '/api/auth/admin') {
+        const secret = process.env.AUTH_ADMIN_SECRET || '';
+        const provided = req.headers['x-admin-secret'] || searchParams.get('secret') || '';
+        if (!secret) return json(503, { ok: false, reason: 'secret_not_configured' });
+        if (provided !== secret) return json(403, { ok: false, reason: 'forbidden' });
+
+        if (req.method === 'GET') {
+            return json(200, { ok: true, db: loadAuthDb() });
+        }
+        if (req.method !== 'POST') return json(405, { ok: false, reason: 'method' });
+        const adminBody = await readBody();
+        const action = String(adminBody.action || '');
+        const db = loadAuthDb();
+        db.codes = (db.codes && typeof db.codes === 'object') ? db.codes : {};
+        db.sessions = (db.sessions && typeof db.sessions === 'object') ? db.sessions : {};
+
+        if (action === 'get') {
+            return json(200, { ok: true, db });
+        }
+        if (action === 'sync') {
+            /* Pousse/retire UN code : rec complet, ou {active:false} pour révoquer. */
+            const code = normalizeCode(adminBody.code);
+            if (!code) return json(200, { ok: false, reason: 'missing' });
+            if (adminBody.rec && typeof adminBody.rec === 'object' && adminBody.rec.active !== false) {
+                db.codes[code] = adminBody.rec;
+            } else {
+                delete db.codes[code];
+                delete db.sessions[code];
+            }
+            saveAuthDb(db);
+            return json(200, { ok: true, code });
+        }
+        if (action === 'sessions_set') {
+            /* Remplace l'état des sessions (déconnexion ciblée/globale par le bot). */
+            if (adminBody.sessions && typeof adminBody.sessions === 'object') {
+                db.sessions = adminBody.sessions;
+            }
+            saveAuthDb(db);
+            return json(200, { ok: true });
+        }
+        if (action === 'sessions_clear') {
+            db.sessions = {};
+            saveAuthDb(db);
+            return json(200, { ok: true });
+        }
+        return json(200, { ok: false, reason: 'unknown_action' });
+    }
+
     if (req.method !== 'POST') return json(405, { ok: false, reason: 'method' });
     const body = await readBody();
 
