@@ -89,6 +89,9 @@
         <span style="position:absolute;top:.42rem;right:.48rem;width:.5rem;height:.5rem;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)"></span>
       </button>
       <button style="width:2.2rem;height:2.2rem;border-radius:.65rem;background:linear-gradient(135deg,#3A3F55,#1C2030);border:1px solid var(--line);cursor:pointer;transition:.3s" data-view="profil" aria-label="Profil"></button>
+      <button class="icon-btn" data-logout title="Se déconnecter" aria-label="Se déconnecter">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      </button>
       <div id="searchPanel" class="glass">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:.6rem">
           <p style="font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)" id="srLabel">Suggestions</p>
@@ -117,6 +120,7 @@
       <a class="mobile-link" href="#vurecent" data-view="vurecent">Vu récemment<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
       <a class="mobile-link" href="#maliste" data-view="maliste">Ma liste<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
       <a class="mobile-link" href="#profil" data-view="profil">Profil<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></a>
+      <button class="mobile-link mobile-link-logout" data-logout type="button">Se déconnecter<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button>
     </nav>
     <div class="mt-auto pt-6 text-xs" style="color:var(--muted)">NOX — Streaming Premium</div>
   </div>
@@ -261,6 +265,10 @@
       </div>
       <div id="profViewActions">
         <button class="btn-hero btn-ghost" id="profEditBtn" style="padding:.7rem 1.3rem;font-size:.85rem">Modifier le profil</button>
+        <button class="btn-hero btn-ghost btn-logout" data-logout type="button" style="padding:.7rem 1.3rem;font-size:.85rem">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+          Se déconnecter
+        </button>
       </div>
       <div id="profEditActions" style="display:none;gap:.6rem">
         <button class="btn-hero btn-primary" id="profSaveBtn" style="padding:.7rem 1.3rem;font-size:.85rem">Enregistrer</button>

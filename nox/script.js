@@ -85,6 +85,22 @@ async function authCheck(){
     return false;
   }catch(e){return false;}   /* échec réseau : session locale conservée */
 }
+/* Déconnexion : ferme la session CÔTÉ SERVEUR (sinon /api/auth/check
+   périodique recréerait une session glissante), efface le code mémorisé
+   localement puis réaffiche le portail de connexion. */
+async function authLogout(){
+  let code='';try{code=localStorage.getItem(AUTH_KEY)||'';}catch(e){}
+  if(code){
+    try{
+      await fetch(authFetchUrl('/api/auth/logout'),{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({code:code}),signal:AbortSignal.timeout(8000)});
+    }catch(e){}   /* même si le serveur est injoignable, on déconnecte localement */
+  }
+  try{localStorage.removeItem(AUTH_KEY);}catch(e){}
+  const inp=document.getElementById('authCode');if(inp)inp.value='';
+  if(typeof closeMobileMenu==='function')closeMobileMenu();
+  authShow('authStepLogin');
+}
 (function initAuthGate(){
   const gate=document.getElementById('authGate');if(!gate)return;
   document.body.classList.add('auth-locked');
@@ -101,6 +117,8 @@ async function authCheck(){
   });
   authCheck().then(ok=>{if(!ok)authShow('authStepLogin');});
   setInterval(authCheck,AUTH_CHECK_MS);
+  /* Bouton(s) « Se déconnecter » : navbar, menu mobile, vue profil. */
+  document.querySelectorAll('[data-logout]').forEach(el=>{el.addEventListener('click',e=>{e.preventDefault();authLogout();});});
 })();
 
 /* ============ NOX — Données & Interactions ============ */

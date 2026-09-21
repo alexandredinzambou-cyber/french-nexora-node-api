@@ -68,6 +68,12 @@ body.auth-locked>*:not(#authGate){display:none !important}
 .nav-link:hover::after,.nav-link.active::after{transform:scaleX(1)}
 .icon-btn{position:relative;display:grid;place-items:center;width:2.4rem;height:2.4rem;border-radius:50%;color:var(--muted);transition:color .3s,background .3s,transform .3s var(--ease)}
 .icon-btn:hover{color:var(--txt);background:rgba(255,255,255,.08);transform:translateY(-2px)}
+/* ============ DÉCONNEXION ============ */
+.icon-btn[data-logout]:hover{color:#FF7A8A}
+.mobile-link-logout{width:100%;background:none;border:0;cursor:pointer;font-family:inherit;text-align:left;color:#FF9AA6}
+.mobile-link-logout:hover{color:#FF7A8A;padding-left:.4rem}
+.btn-logout{display:inline-flex;align-items:center;gap:.5rem}
+.btn-logout:hover{color:#FF7A8A;border-color:rgba(255,122,138,.45)}
 #searchWrap{display:flex;align-items:center;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:99px;transition:width .55s var(--ease),background .3s,border-color .3s;width:2.55rem;overflow:hidden}
 #searchWrap.open{width:min(21rem,52vw);border-color:rgba(124,92,255,.55);background:rgba(10,12,18,.85)}
 #searchWrap input{flex:1;background:none;border:0;outline:0;color:var(--txt);font:500 .86rem 'Outfit',sans-serif;padding-right:.9rem;opacity:0;transition:opacity .3s .15s}

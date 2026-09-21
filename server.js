@@ -143,6 +143,21 @@ async function handleAuthApi(pathname, searchParams, req, res) {
         return json(200, authPayload(st.rec));
     }
 
+    /* POST /api/auth/logout { code } : déconnexion du portail. La session est
+       supprimée CÔTÉ SERVEUR (sinon la revérification périodique /api/auth/check
+       recréerait une session glissante) ; le code d'accès lui-même reste actif
+       tant que sa durée n'est pas écoulée. */
+    if (pathname === '/api/auth/logout') {
+        const code = normalizeCode(body.code);
+        if (!code) return json(200, { ok: false, reason: 'missing' });
+        const db = loadAuthDb();
+        if (db.sessions && typeof db.sessions === 'object' && db.sessions[code]) {
+            delete db.sessions[code];
+            saveAuthDb(db);
+        }
+        return json(200, { ok: true });
+    }
+
     json(404, { ok: false, reason: 'unknown' });
 }
 
