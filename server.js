@@ -17,9 +17,47 @@ const AUTH_FILE = path.join(__dirname, '_nox_auth.json');
 const AUTH_TTL_DAYS = { '3d': 3, '1m': 30, 'forever': 0 };   // 0 = illimité
 const AUTH_LABELS = { '3d': '3 jours', '1m': '1 mois', 'forever': 'Pour toujours' };
 
+/* --- Seed des codes via variable d'environnement (Railway) ---
+   Le filesystem Railway est ÉPHÉMÈRE : _nox_auth.json (gitignore) disparaît à
+   chaque redéploiement, et aucun code n'est alors valide. NOX_AUTH_CODES permet
+   de déclarer les codes actifs en prod, format (JSON ou simplifié) :
+     NOX_AUTH_CODES="NOX-XXXX-XXXX,NOX-YYYY-YYYY"            → tous 'forever'
+     NOX_AUTH_CODES='{"NOX-XXXX-XXXX":{"plan":"1m","exp":0}}' → JSON complet
+   Le seed fusionne (sans écraser) l'état fichier à chaque loadAuthDb(). */
+function seededCodes() {
+    const raw = (process.env.NOX_AUTH_CODES || '').trim();
+    if (!raw) return {};
+    const out = {};
+    try {
+        if (raw.startsWith('{')) {
+            const parsed = JSON.parse(raw);
+            for (const [code, rec] of Object.entries(parsed)) {
+                if (rec && typeof rec === 'object') out[normalizeCode(code)] = rec;
+                else out[normalizeCode(code)] = { plan: 'forever', exp: 0, active: 1 };
+            }
+        } else {
+            for (const c of raw.split(',')) {
+                const code = normalizeCode(c);
+                if (code) out[code] = { plan: 'forever', exp: 0, active: 1, createdBy: 'env' };
+            }
+        }
+    } catch (e) { console.error('[auth] NOX_AUTH_CODES invalide :', e.message); }
+    return out;
+}
+
 function loadAuthDb() {
-    try { return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf-8')); }
-    catch (e) { return { codes: {}, sessions: {} }; }
+    let db;
+    try { db = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf-8')); }
+    catch (e) { db = { codes: {}, sessions: {} }; }
+    db.codes = (db.codes && typeof db.codes === 'object') ? db.codes : {};
+    db.sessions = (db.sessions && typeof db.sessions === 'object') ? db.sessions : {};
+    /* Fusion du seed env : les codes déclarés restent valides même si le fichier
+       a disparu (redéploiement Railway). Ne supprime jamais un code existant. */
+    const seed = seededCodes();
+    for (const [code, rec] of Object.entries(seed)) {
+        if (!db.codes[code]) db.codes[code] = rec;
+    }
+    return db;
 }
 function saveAuthDb(db) {
     try { fs.writeFileSync(AUTH_FILE, JSON.stringify(db, null, 2)); } catch (e) { console.error('[auth] save:', e.message); }
