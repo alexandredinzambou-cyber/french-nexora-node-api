@@ -166,9 +166,17 @@ const textTypes = ['application/json', 'application/javascript', 'text/html', 't
 const PORT = process.env.PORT || 3100; // 3100 : évite le conflit avec l'API Content-Nexora (8787)
 const HOST = '0.0.0.0';
 
-/* API Content-Nexora (autoflix-api) : source unique du contenu NOX.
-   L'API Nexora Node (port 3000) est déconnectée (optionnelle via --with-node). */
-const CONTENT_NEXORA_BASE = (process.env.CONTENT_NEXORA_API || 'http://127.0.0.1:8787').replace(/\/+$/, '');
+/* API Content-Nexora (autoflix-api) : métadonnées, catalogue, recherche, resolve.
+   Les flux vidéo (/api/streams, /api/providers) viennent de l'API Node. */
+const CONTENT_NEXORA_BASE = (process.env.CONTENT_NEXORA_API || 'https://content-nexora-production.example.com').replace(/\/+$/, '');
+
+/* API French Nexora Node (port 3200) : source principale des flux vidéo (Puppeteer providers).
+   Contourne Cloudflare via Puppeteer. */
+const NODE_API_BASE = (process.env.NODE_API_BASE || 'http://127.0.0.1:3200').replace(/\/+$/, '');
+
+/* API QuickJS (port 3300) : 20+ providers QuickJS (anime-sama, frenchstream, voiranime, etc.).
+   Compilés depuis src/ vers providers/ via esbuild. */
+const QUICKJS_API_BASE = (process.env.QUICKJS_API_BASE || 'http://127.0.0.1:3300').replace(/\/+$/, '');
 
 /* API Anime-Sama (anime-sama-api) : service anime standalone.
    Exposé via /api/anime/* en same-origin pour le site NOX. */
@@ -225,10 +233,213 @@ async function proxyContentNexora(target, init, res) {
         res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({
             error: 'API Content-Nexora injoignable.',
-            message: "Lancez l'API Content-Nexora (autoflix-api) sur http://127.0.0.1:8787, ou définissez CONTENT_NEXORA_API.",
+            message: "Lancez l'API Content-Nexora (autoflix-api) sur https://content-nexora-production.example.com, ou définissez CONTENT_NEXORA_API.",
             contentNexora: CONTENT_NEXORA_BASE + '/api/health',
         }));
     }
+}
+
+/* Proxy same-origin vers French Nexora Node API : flux vidéo (/api/streams, /api/providers).
+   Providers Puppeteer (orion, aether, tmdbembed). */
+async function proxyNodeApi(target, init, res) {
+    try {
+        const r = await fetch(target, init);
+        const body = Buffer.from(await r.arrayBuffer());
+        res.writeHead(r.status, { 'Content-Type': r.headers.get('content-type') || 'application/json; charset=utf-8' });
+        res.end(body);
+    } catch (e) {
+        res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+            error: 'API French Nexora Node injoignable.',
+            message: "Lancez l'API Node (api-server.js) sur http://127.0.0.1:3200, ou définissez NODE_API_BASE.",
+            nodeApi: NODE_API_BASE + '/api/health',
+        }));
+    }
+}
+
+/* Proxy same-origin vers QuickJS API : 20+ providers QuickJS (anime-sama, frenchstream, voiranime, etc.). */
+async function proxyQuickJsApi(target, init, res) {
+    try {
+        const r = await fetch(target, init);
+        const body = Buffer.from(await r.arrayBuffer());
+        res.writeHead(r.status, { 'Content-Type': r.headers.get('content-type') || 'application/json; charset=utf-8' });
+        res.end(body);
+    } catch (e) {
+        res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+            error: 'API QuickJS injoignable.',
+            message: "Lancez l'API QuickJS (quickjs-api.js) sur http://127.0.0.1:3300, ou définissez QUICKJS_API_BASE.",
+            quickjsApi: QUICKJS_API_BASE + '/health',
+        }));
+    }
+}
+
+/* ============================================================================
+   GESTIONNAIRE API VIDÉO COMBINÉE : Node API (Puppeteer) + QuickJS API
+   ============================================================================ */
+
+async function fetchJson(url, init = {}) {
+    try {
+        const r = await fetch(url, { ...init, headers: { 'Accept': 'application/json', ...(init.headers || {}) }, signal: AbortSignal.timeout(130000) });
+        if (!r.ok) return null;
+        return await r.json();
+    } catch (e) {
+        return null;
+    }
+}
+
+async function handleVideoApiRequest(requestUrl, req, res) {
+    const isProviders = requestUrl.pathname === '/api/providers';
+    const isStreams = requestUrl.pathname === '/api/streams' || requestUrl.pathname.startsWith('/api/streams/');
+    
+    if (isProviders) {
+        return handleProvidersRequest(res);
+    }
+    
+    if (isStreams) {
+        return handleStreamsRequest(requestUrl, res);
+    }
+    
+    // Fallback : proxy vers Node API
+    const target = NODE_API_BASE + requestUrl.pathname + requestUrl.search;
+    const init = { method: req.method, headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(130000) };
+    proxyNodeApi(target, init, res);
+}
+
+async function handleProvidersRequest(res) {
+    const [nodeData, quickjsData] = await Promise.all([
+        fetchJson(NODE_API_BASE + '/api/providers'),
+        fetchJson(QUICKJS_API_BASE + '/api/providers')
+    ]);
+    
+    const nodeProviders = (nodeData && nodeData.providers) || [];
+    const quickjsProviders = (quickjsData && quickjsData.providers) || [];
+    
+    // Fusionner en évitant les doublons (par id)
+    const seen = new Set();
+    const merged = [];
+    
+    for (const p of [...nodeProviders, ...quickjsProviders]) {
+        const id = p.id || p.name;
+        if (id && !seen.has(id)) {
+            seen.add(id);
+            merged.push({
+                id,
+                name: p.name || id,
+                description: p.description || '',
+                source: p.source || (nodeProviders.includes(p) ? 'french-nexora-node' : 'quickjs'),
+                enabled: p.enabled !== false
+            });
+        }
+    }
+    
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({
+        language: 'fr',
+        count: merged.length,
+        providers: merged,
+        sources: {
+            'french-nexora-node': nodeProviders.length,
+            'quickjs': quickjsProviders.length
+        }
+    }));
+}
+
+async function handleStreamsRequest(requestUrl, res) {
+    const searchParams = requestUrl.searchParams;
+    const tmdbId = searchParams.get('tmdbId') || searchParams.get('id');
+    const mediaType = searchParams.get('mediaType') || searchParams.get('type') || 'movie';
+    const provider = searchParams.get('provider') || 'all';
+    const season = searchParams.get('season') || searchParams.get('saison') || '1';
+    const episode = searchParams.get('episode') || '1';
+    
+    if (!tmdbId) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(JSON.stringify({ error: 'tmdbId requis' }));
+    }
+    
+    // Construire les URLs pour les deux APIs
+    const params = new URLSearchParams({
+        tmdbId,
+        mediaType,
+        season,
+        episode
+    });
+    if (provider !== 'all') params.set('provider', provider);
+    
+    const nodeUrl = NODE_API_BASE + '/api/streams?' + params.toString();
+    const quickjsUrl = QUICKJS_API_BASE + '/api/streams?' + params.toString();
+    
+    const [nodeData, quickjsData] = await Promise.all([
+        fetchJson(nodeUrl),
+        fetchJson(quickjsUrl)
+    ]);
+    
+    // Fusionner les streams
+    const nodeStreams = (nodeData && (nodeData.streams || nodeData.sources || nodeData.players || [])) || [];
+    const quickjsStreams = (quickjsData && (quickjsData.streams || quickjsData.sources || quickjsData.players || [])) || [];
+    
+    return mergeAndRespond(res, tmdbId, mediaType, provider, nodeStreams, quickjsStreams, nodeData, quickjsData);
+}
+
+function mergeAndRespond(res, tmdbId, mediaType, provider, nodeStreams, quickjsStreams, nodeData, quickjsData) {
+    // Normaliser et dédupliquer
+    const seenUrls = new Set();
+    const mergedStreams = [];
+    
+    function normalizeStream(s, source) {
+        const url = s.url || s.proxyM3U8 || s.proxyM3u8 || s.m3u8 || s.directUrl || s.embedUrl || s.streamUrl || '';
+        if (!url || seenUrls.has(url)) return null;
+        seenUrls.add(url);
+        return {
+            url,
+            type: s.type || (/\.m3u8/i.test(url) ? 'hls' : 'iframe'),
+            quality: s.quality || null,
+            language: s.language || s.lang || null,
+            providerName: s.providerName || s.provider || s.source || source,
+            provider: source,
+            headers: s.headers || null,
+            referer: s.referer || null
+        };
+    }
+    
+    for (const s of nodeStreams) {
+        const ns = normalizeStream(s, 'french-nexora-node');
+        if (ns) mergedStreams.push(ns);
+    }
+    for (const s of quickjsStreams) {
+        const ns = normalizeStream(s, 'quickjs');
+        if (ns) mergedStreams.push(ns);
+    }
+    
+    const ok = mergedStreams.length > 0;
+    
+    res.writeHead(ok ? 200 : 404, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({
+        ok,
+        success: ok,
+        tmdbId,
+        mediaType,
+        type: mediaType,
+        provider: provider || 'all',
+        count: mergedStreams.length,
+        streams: mergedStreams,
+        sources: mergedStreams,
+        hosters: mergedStreams.map((s, i) => ({
+            id: i,
+            nom: s.providerName,
+            lang: s.language || 'fr',
+            quality: s.quality,
+            embedUrl: s.type === 'iframe' ? s.url : null,
+            m3u8: s.type === 'hls' ? s.url : null,
+            source: s.provider
+        })),
+        providers: [
+            { id: 'french-nexora-node', name: 'French Nexora Node (Puppeteer)', status: nodeData ? 'ok' : 'error', count: nodeStreams.length },
+            { id: 'quickjs', name: 'QuickJS Providers (20+)', status: quickjsData ? 'ok' : 'error', count: quickjsStreams.length }
+        ],
+        error: ok ? undefined : 'Aucune source trouvée sur les deux APIs'
+    }));
 }
 
 function getLocalIp() {
@@ -431,6 +642,17 @@ const server = http.createServer(async (req, res) => {
         handleAuthApi(requestUrl.pathname, requestUrl.searchParams, req, res);
         return;
     }
+    // Health check endpoint - local, no auth required
+    if (requestUrl.pathname === '/api/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        return res.end(JSON.stringify({
+            ok: true,
+            service: 'french-nexora-api',
+            status: 'healthy',
+            timestamp: new Date().toISOString(),
+            version: '1.0.0'
+        }));
+    }
     if (requestUrl.pathname.startsWith('/api/drama/')) {
         // API ReelShort — proxy same-origin vers le service drama standalone (port 5002)
         // Mapping : /api/drama/xyz → /api/v1/reelshort/xyz (routes flask_restx de reelshort.py)
@@ -475,9 +697,43 @@ const server = http.createServer(async (req, res) => {
         return;
     }
     if (requestUrl.pathname.startsWith('/api/')) {
-        // API Nexora Node déconnectée — le contenu est fourni par l'API Content-Nexora (port 8787)
+        // Vérification d'authentification pour toutes les routes API sauf /api/auth/*
+        if (!requestUrl.pathname.startsWith('/api/auth/')) {
+            const authHeader = req.headers.authorization || '';
+            const codeHeader = req.headers['x-nox-code'] || '';
+            const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+            const code = codeHeader || token;
+            
+            if (!code) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Non authentifié (code requis)' }));
+            }
+            
+            const db = loadAuthDb();
+            const normalizedCode = normalizeCode(code);
+            const st = authCodeState(db, normalizedCode);
+            if (!st.ok) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Code invalide ou expiré', reason: st.reason }));
+            }
+            // Session glissante : prolonge la session tant que le code est valide
+            db.sessions[normalizedCode] = Date.now() + 30 * 86400000;
+            saveAuthDb(db);
+        }
+
+        // Routes flux vidéo → Combiner Node API (Puppeteer) + QuickJS API (20+ providers)
+        const isStreams = requestUrl.pathname === '/api/streams' || requestUrl.pathname.startsWith('/api/streams/');
+        const isProviders = requestUrl.pathname === '/api/providers';
+        const isVideoApi = isStreams || isProviders;
+
+        if (isVideoApi) {
+            return handleVideoApiRequest(requestUrl, req, res);
+        }
+
+        // Autres routes API → Content-Nexora
         const target = CONTENT_NEXORA_BASE + requestUrl.pathname + requestUrl.search;
         const init = { method: req.method, headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(130000) };
+        
         if (req.method === 'GET' || req.method === 'HEAD') {
             proxyContentNexora(target, init, res);
         } else {
@@ -539,7 +795,8 @@ server.listen(PORT, HOST, () => {
     const ip = getLocalIp();
     console.log(`\n🚀 Server running at: http://${ip}:${PORT}/`);
     console.log(`🎬 Site NOX:          http://${ip}:${PORT}/nox/`);
-    console.log(`🔌 Contenu fourni par l'API Content-Nexora (${CONTENT_NEXORA_BASE}) — API Nexora Node déconnectée`);
+    console.log(`🔌 Flux vidéo (streams/providers):  French Nexora Node API → ${NODE_API_BASE}  +  QuickJS API → ${QUICKJS_API_BASE}`);
+    console.log(`📚 Métadonnées/catalogue/recherche: Content-Nexora → ${CONTENT_NEXORA_BASE}`);
     console.log(`🎌 API Anime-Sama:    http://${ip}:${PORT}/api/anime/ (proxy → ${ANIME_API_BASE})`);
     console.log(`🎭 API ReelShort:      http://${ip}:${PORT}/api/drama/ (proxy → ${DRAMA_API_BASE})`);
     console.log(`📡 Listening on:     ${HOST}:${PORT}`);
