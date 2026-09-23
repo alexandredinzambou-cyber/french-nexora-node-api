@@ -420,11 +420,17 @@ async function handleApiRequest(req, res, url) {
         /* Cache de fond : si une requête précédente pour le même média n'a pas eu
            le temps de répondre, ses scrapers ont continué en arrière-plan. On sert
            d'abord leurs résultats tardifs (rappel quasi instantané). */
-        const cacheKey = `streams:${query.mediaType}:${query.tmdbId}:${query.season || ''}x${query.episode || ''}`;
+        /* Clé incluant le provider demandé : sans ça, le résultat du premier
+           provider interrogé (ex. frenchstream) était servi pour TOUS les autres
+           (le front demandait coflix et recevait le flux frenchstream). */
+        const cacheKey = `streams:${requested}:${query.mediaType}:${query.tmdbId}:${query.season || ''}x${query.episode || ''}`;
+        const wantedIds = new Set(selected.map(provider => provider.id));
         const cached = streamSuccessCache.get(cacheKey);
         if (cached) {
             await Promise.race([cached.done, new Promise(resolve => setTimeout(resolve, 2500))]);
-            const cachedStreams = cached.results.flatMap(result => (result && result.streams) || []);
+            const cachedStreams = cached.results
+                .filter(result => result && wantedIds.has(result.provider.id))
+                .flatMap(result => result.streams || []);
             if (cachedStreams.length) {
                 const streams = await withGlobalDeadline(finalizeStreams(cachedStreams), GLOBAL_TIMEOUT_MS, cachedStreams);
                 return json(res, 200, {
@@ -434,13 +440,15 @@ async function handleApiRequest(req, res, url) {
                     total: streams.length,
                     streams,
                     hosters: streams.map(hosterFromStream),
-                    providers: cached.results.map(result => ({
-                        id: result.provider.id,
-                        name: result.provider.name,
-                        status: result.status,
-                        count: result.streams.length,
-                        error: result.error,
-                    })),
+                    providers: cached.results
+                        .filter(result => wantedIds.has(result.provider.id))
+                        .map(result => ({
+                            id: result.provider.id,
+                            name: result.provider.name,
+                            status: result.status,
+                            count: result.streams.length,
+                            error: result.error,
+                        })),
                 });
             }
         }
