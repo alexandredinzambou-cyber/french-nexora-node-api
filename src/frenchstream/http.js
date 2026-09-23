@@ -5,9 +5,9 @@
 import { safeFetch, createProviderRateLimiter } from '../utils/resolvers.js';
 
 const rateLimit = createProviderRateLimiter();
-const DOMAIN = 'french-stream.one';
+const DOMAIN = 'french-stream.net';
 
-export const BASE_URLS = ['https://french-stream.one'];
+export const BASE_URLS = ['https://french-stream.net'];
 export const BASE_URL = BASE_URLS[0];
 export const GLOBAL_TIMEOUT_MS = 20000;
 

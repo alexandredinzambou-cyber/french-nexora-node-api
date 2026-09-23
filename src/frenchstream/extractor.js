@@ -190,7 +190,10 @@ async function searchByTitle(title, mediaType, season) {
     const allCards = [];
     const results = await Promise.allSettled(
         BASE_URLS.map(baseUrl => {
-            const url = baseUrl + '/index.php?do=search&subaction=search&story=' + encodeURIComponent(title);
+            /* french-stream.one redirige 301 vers french-stream.net en PERDANT la query
+               string de /index.php?do=search (→ page d'accueil sans résultats).
+               L'URL courte /?do=search… fonctionne directement sur .net. */
+            const url = 'https://french-stream.net/?do=search&subaction=search&story=' + encodeURIComponent(title);
             return fetchText(url, { baseUrl }).then(html => parseSearchCards(html, baseUrl));
         })
     );
