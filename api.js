@@ -373,6 +373,10 @@ async function getProviderStreams(provider, query) {
    n'a rien trouvé dans la fenêtre de deadline, on retient la promesse du fond pour
    servir le résultat dès le rappel suivant. */
 const streamSuccessCache = new Map();
+/* Stats de vitesse par provider : les gagnants passent en tête de file au prochain
+   appel → la fenêtre de deadline capture d'abord les sites réactifs. */
+const providerSpeed = new Map();
+function providerPriority(id) { return (providerSpeed.get(id) || { wins: 0 }).wins; }
 async function handleApiRequest(req, res, url) {
     if (req.method !== 'GET') {
         return json(res, 405, { error: 'Méthode non autorisée.' });
@@ -446,7 +450,7 @@ async function handleApiRequest(req, res, url) {
         const results = [];
         const backgrounds = [];
         const pending = new Set();
-        const queue = [...selected];
+        const queue = [...selected].sort((a, b) => providerPriority(b.id) - providerPriority(a.id));
         const launches = [];
         let doneResolve;
         const done = new Promise(resolve => { doneResolve = resolve; });
@@ -460,7 +464,16 @@ async function handleApiRequest(req, res, url) {
                 const remainingForProvider = Math.max(2000, startedAt + providerDeadline - Date.now());
                 /* Le scraping réel continue en arrière-plan et alimente `results`
                    même après la deadline → récupéré par le prochain rappel (cache). */
-                const real = getProviderStreams(provider, query).then(result => { results.push(result); return result; });
+                const providerStart = Date.now();
+                const real = getProviderStreams(provider, query).then(result => {
+                    results.push(result);
+                    if (result.streams.length) {
+                        const stat = providerSpeed.get(provider.id) || { wins: 0 };
+                        stat.wins = Math.min(50, stat.wins + 1);
+                        providerSpeed.set(provider.id, stat);
+                    }
+                    return result;
+                });
                 backgrounds.push(real);
                 const task = withGlobalDeadline(real, remainingForProvider, null)
                     .catch(() => null)
