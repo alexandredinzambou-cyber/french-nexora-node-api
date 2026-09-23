@@ -1,4 +1,5 @@
 import { safeFetch, sleep } from '../utils/resolvers.js';
+import { flareFetchText } from '../utils/flaresolverr.js';
 import { CONFIG } from './config.js';
 
 const RETRY_DELAYS = [1000, 2000, 4000];
@@ -68,8 +69,15 @@ export async function fetchText(urlOrPath, options = {}) {
   const domains = [CONFIG.BASE_URL, ...(CONFIG.DOMAINS || [])];
   for (const domain of domains) {
     const result = await fetchFromDomain(domain, urlOrPath, options);
-    if (result) return result;
+    // Pages verrouillées (Turnstile) : le HTML arrive en 200 mais sans contenu
+    // utile → on le traite comme un échec et on passe à la suite.
+    if (result && !/xf_lock|turnstile/i.test(result)) return result;
   }
+  /* Dernier recours : FlareSolverr (Chromium headless). Il résout le Turnstile
+     et exécute le JS de la page : le HTML retourné contient le lecteur injecté. */
+  const absolute = urlOrPath.startsWith('http') ? urlOrPath : `${CONFIG.BASE_URL}${urlOrPath}`;
+  const html = await flareFetchText(absolute, { maxTimeout: 50000 });
+  if (html && !/xf_lock|turnstile/i.test(html)) return html;
   throw new Error(`[DuLourd] All domains failed for ${urlOrPath}`);
 }
 

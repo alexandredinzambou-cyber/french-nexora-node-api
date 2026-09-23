@@ -5,6 +5,7 @@
  * - Rate limiting intégré
  */
 import { safeFetch, fetchWithRetry, createProviderRateLimiter, sleep } from '../utils/resolvers.js'
+import { flareFetchText } from '../utils/flaresolverr.js'
 
 const rateLimit = createProviderRateLimiter();
 
@@ -107,6 +108,11 @@ export async function fetchText(path, options = {}) {
     const result = await fetchFromDomain(domain, path, { ...options, responseType: 'text' });
     if (result) return result;
   }
+  /* BotBlocker (anti-bot JS) bloque le HTML classique : FlareSolverr (Chromium
+     headless) exécute le challenge et retourne le HTML final avec le contenu. */
+  const absolute = path.startsWith('http') ? path : `https://${DOMAINS[0]}${path}`;
+  const html = await flareFetchText(absolute, { maxTimeout: 50000 });
+  if (html && html.length > 200 && !/BotBlocker/i.test(html)) return html;
   return null;
 }
 
@@ -118,6 +124,11 @@ export async function fetchJson(path, options = {}) {
   for (const domain of DOMAINS) {
     const result = await fetchFromDomain(domain, path, { ...options, responseType: 'json' });
     if (result) return result;
+  }
+  const absolute = path.startsWith('http') ? path : `https://${DOMAINS[0]}${path}`;
+  const html = await flareFetchText(absolute, { maxTimeout: 50000 });
+  if (html) {
+    try { return JSON.parse(html); } catch { /* page HTML, pas du JSON */ }
   }
   return null;
 }
