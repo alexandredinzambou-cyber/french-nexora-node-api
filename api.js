@@ -26,7 +26,7 @@ const RESOLVE_TIMEOUT_MS = Number(process.env.API_RESOLVE_TIMEOUT_MS || 15000);
 /* Deadline GLOBALE pour une requête /api/streams : Railway coupe la passerelle
    vers 30s si rien ne répond → 502. On borné tout le traitement (providers +
    résolution des embeds) pour répondre à temps, quitte à revenir partiel. */
-const GLOBAL_TIMEOUT_MS = Number(process.env.API_GLOBAL_TIMEOUT_MS || 25000);
+const GLOBAL_TIMEOUT_MS = Number(process.env.API_GLOBAL_TIMEOUT_MS || 15000);
 
 /* Race une promesse contre une deadline : à l'échéance, on garde la valeur
    déjà calculée (ou fallback) sans faire planter la requête entière. */
