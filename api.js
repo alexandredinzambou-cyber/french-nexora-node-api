@@ -23,6 +23,18 @@ for (const entry of manifest.scrapers || []) {
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.API_PROVIDER_TIMEOUT_MS || 55000);
 const RESOLVE_TIMEOUT_MS = Number(process.env.API_RESOLVE_TIMEOUT_MS || 15000);
+/* Deadline GLOBALE pour une requête /api/streams : Railway coupe la passerelle
+   vers 30s si rien ne répond → 502. On borné tout le traitement (providers +
+   résolution des embeds) pour répondre à temps, quitte à revenir partiel. */
+const GLOBAL_TIMEOUT_MS = Number(process.env.API_GLOBAL_TIMEOUT_MS || 25000);
+
+/* Race une promesse contre une deadline : à l'échéance, on garde la valeur
+   déjà calculée (ou fallback) sans faire planter la requête entière. */
+function withGlobalDeadline(promise, ms, fallback) {
+    let timer;
+    const timeout = new Promise(resolve => { timer = setTimeout(() => resolve(fallback), ms); });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 /* Résolveur partagé (src/utils/resolvers.js, module ES) — dispo en require() sur Node ≥ 22.
    Sert de deuxième passe pour les embeds HTML que les providers n'ont pas su résoudre. */
@@ -393,8 +405,24 @@ async function handleApiRequest(req, res, url) {
 
         if (!selected.length) return json(res, 404, { error: `Provider inconnu: ${requested}` });
 
-        const results = await Promise.all(selected.map(provider => getProviderStreams(provider, query)));
-        const streams = await finalizeStreams(results.flatMap(result => result.streams));
+        /* Course INDIVIDUELLE par provider contre la deadline : les providers
+           rapides gardent leurs résultats même si d'autres traînent. */
+        const startedAt = Date.now();
+        const providerDeadline = Math.max(5000, GLOBAL_TIMEOUT_MS - 5000); // réserve du temps pour la finalisation
+        const results = (await Promise.all(
+            selected.map(provider => withGlobalDeadline(getProviderStreams(provider, query), providerDeadline, null))
+        )).filter(Boolean);
+        /* Les providers encore en cours au moment de la deadline sont marqués timeout. */
+        const doneIds = new Set(results.map(result => result.provider.id));
+        const timedOut = selected
+            .filter(provider => !doneIds.has(provider.id))
+            .map(provider => ({ id: provider.id, name: provider.name, status: 'timeout', count: 0, error: 'Délai global dépassé' }));
+        const remaining = Math.max(3000, GLOBAL_TIMEOUT_MS - (Date.now() - startedAt));
+        const streams = await withGlobalDeadline(
+            finalizeStreams(results.flatMap(result => result.streams)),
+            remaining,
+            results.flatMap(result => result.streams)
+        );
         return json(res, 200, {
             language: 'fr',
             query,
@@ -402,13 +430,16 @@ async function handleApiRequest(req, res, url) {
             total: streams.length,
             streams,
             hosters: streams.map(hosterFromStream),
-            providers: results.map(result => ({
-                id: result.provider.id,
-                name: result.provider.name,
-                status: result.status,
-                count: result.streams.length,
-                error: result.error,
-            })),
+            providers: [
+                ...results.map(result => ({
+                    id: result.provider.id,
+                    name: result.provider.name,
+                    status: result.status,
+                    count: result.streams.length,
+                    error: result.error,
+                })),
+                ...timedOut,
+            ],
         });
     }
 
