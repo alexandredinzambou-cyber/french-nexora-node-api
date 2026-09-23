@@ -1,7 +1,9 @@
 export const SITE = {
-  BASE_URL: 'https://wookafr.cymru',
-  DOMAINS: ['https://wookafr.cymru', 'https://wookafr.fyi', 'https://wookafr.app', 'https://wookafr.to'],
-  DOMAIN: 'wookafr.cymru',
+  // wookafr.cymru/.fyi redirigent (301) vers wookafr.boston : on part direct
+  // sur le domaine canonique (chaque 301 grignote la deadline du scraper).
+  BASE_URL: 'https://wookafr.boston',
+  DOMAINS: ['https://wookafr.boston', 'https://wookafr.cymru', 'https://wookafr.fyi', 'https://wookafr.to'],
+  DOMAIN: 'wookafr.boston',
 }
 
 export const ENDPOINTS = {

@@ -266,7 +266,7 @@ export async function extractStreams(tmdbId, mediaType, season, episode) {
       for (const slug of [...new Set(candidates)]) {
         const result = await probeMovie(slug)
         if (result) {
-          const stream = toStream(result.url, result.lang, 'Coflix', 'https://coflix.cymru')
+          const stream = toStream(result.url, result.lang, 'Coflix', 'https://coflix.esq')
           const resolved = await resolveStream(stream)
           if (resolved && resolved.url) return [{ ...resolved, provider: 'coflix' }]
           return [{ ...stream, provider: 'coflix', type: 'embed' }]
@@ -278,7 +278,7 @@ export async function extractStreams(tmdbId, mediaType, season, episode) {
     console.log('[Coflix] Movie slug failed, trying WP API search...')
     const wpResult = await searchViaWpApi(titles[0], mediaType, null, null)
     if (wpResult) {
-      const stream = toStream(wpResult.url, wpResult.lang, 'Coflix', 'https://coflix.cymru')
+      const stream = toStream(wpResult.url, wpResult.lang, 'Coflix', 'https://coflix.esq')
       const resolved = await resolveStream(stream)
       if (resolved && resolved.url) return [{ ...resolved, provider: 'coflix' }]
       return [{ ...stream, provider: 'coflix', type: 'embed' }]
@@ -298,7 +298,7 @@ export async function extractStreams(tmdbId, mediaType, season, episode) {
       for (const slug of [...new Set(candidates)]) {
         const result = await probeEpisode(slug, targetSeason, ep)
         if (result) {
-          const stream = toStream(result.url, result.lang, 'Coflix', 'https://coflix.cymru')
+          const stream = toStream(result.url, result.lang, 'Coflix', 'https://coflix.esq')
           const resolved = await resolveStream(stream)
           if (resolved && resolved.url) return [{ ...resolved, provider: 'coflix' }]
           return [{ ...stream, provider: 'coflix', type: 'embed' }]
@@ -313,7 +313,7 @@ export async function extractStreams(tmdbId, mediaType, season, episode) {
         for (const slug of [...new Set(candidates)]) {
           const result = await probeEpisode(slug, targetSeason, targetEpisode)
           if (result) {
-            const stream = toStream(result.url, result.lang, 'Coflix', 'https://coflix.cymru')
+            const stream = toStream(result.url, result.lang, 'Coflix', 'https://coflix.esq')
             const resolved = await resolveStream(stream)
             if (resolved && resolved.url) return [{ ...resolved, provider: 'coflix' }]
             return [{ ...stream, provider: 'coflix', type: 'embed' }]
@@ -327,7 +327,7 @@ export async function extractStreams(tmdbId, mediaType, season, episode) {
   console.log('[Coflix] All slug attempts failed, trying WP API search...')
   const wpResult = await searchViaWpApi(titles[0], mediaType, targetSeason, targetEpisode)
   if (wpResult) {
-    const stream = toStream(wpResult.url, wpResult.lang, 'Coflix', 'https://coflix.cymru')
+    const stream = toStream(wpResult.url, wpResult.lang, 'Coflix', 'https://coflix.esq')
     const resolved = await resolveStream(stream)
     if (resolved && resolved.url) return [{ ...resolved, provider: 'coflix' }]
     return [{ ...stream, provider: 'coflix', type: 'embed' }]

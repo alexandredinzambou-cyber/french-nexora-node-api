@@ -182,6 +182,12 @@ async function trySearch(titles) {
       return null
     })
   )
+  /* L'API REST WordPress (/wp-json/wp/v2) n'est PAS bloquée par BotBlocker
+     (contrairement au HTML et à /?s=) : on l'essaie d'abord — elle renvoie
+     le link réel (ex. /streaming/drame/oppenheimer/). */
+  const wpMatch = await searchViaWpApi(titles[0], 'movie')
+  if (wpMatch) return wpMatch
+
   const settled = await Promise.allSettled(probes)
   for (const r of settled) {
     if (r.status === 'fulfilled' && r.value) return r.value
@@ -189,9 +195,7 @@ async function trySearch(titles) {
   const slugMatch = await trySlugFallback(titles[0], 'movie')
   if (slugMatch) { console.log(`[Wookafr] Found via slug: ${slugMatch.url}`); return slugMatch }
 
-  // Dernier recours : WP REST API
-  console.log('[Wookafr] Trying WP API search...')
-  return await searchViaWpApi(titles[0], 'movie')
+  return null
 }
 
 async function trySearchSeries(titles) {
@@ -225,30 +229,32 @@ async function trySearchSeries(titles) {
       return null
     })
   )
+  const wpMatch = await searchViaWpApi(titles[0], 'tv')
+  if (wpMatch) return wpMatch
+
   const settled = await Promise.allSettled(probes)
   for (const r of settled) {
     if (r.status === 'fulfilled' && r.value) return r.value
   }
   // Try slug fallback before using general results (which may be wrong movies)
   const slugMatch = await trySlugFallback(titles[0], 'series', 0)
-  if (slugMatch) { console.log(`[Wookafr] Found series via slug: ${slugMatch.url}`); return slugMatch }
+  if (slugMatch) { console.log(`[Wookafr] Found via slug: ${slugMatch.url}`); return slugMatch }
 
-  // Dernier recours : WP REST API
-  console.log('[Wookafr] Trying WP API search...')
-  return await searchViaWpApi(titles[0], 'tv')
+  return null
 }
 
-
 /**
- * Fallback : cherche via l'API REST WordPress (/wp-json/v2/posts?search=...)
+ * Fallback : cherche via l'API REST WordPress (/wp-json/wp/v2/posts?search=...)
  * pour trouver l'URL exacte quand la recherche par slug échoue.
  */
 async function searchViaWpApi(query, mediaType) {
   const searchQuery = encodeURIComponent(query);
   console.log(`[Wookafr] WP API search: "${query}"`);
 
-  // Chemins relatifs — fetchText/fetchJson gèrent le fallback multi-domain
-  const apiPath = `/wp-json/v2/posts?search=${searchQuery}&per_page=10`;
+  // Chemin correct de l'API WP : /wp-json/wp/v2/posts (l'ancien /wp-json/v2
+  // renvoyait 404 → fallback jamais utile). Chemin relatif : fetchJson gère
+  // le fallback multi-domain.
+  const apiPath = `/wp-json/wp/v2/posts?search=${searchQuery}&per_page=10&_fields=id,slug,title,link,content`;
   const posts = await fetchJson(apiPath, { timeout: TIMEOUTS.SEARCH });
   if (!posts || !Array.isArray(posts) || posts.length === 0) {
     console.log(`[Wookafr] No WP API results for "${query}"`);
@@ -264,13 +270,15 @@ async function searchViaWpApi(query, mediaType) {
     const isRelevant = title.includes(queryLower) || slug.includes(toSlug(query));
     if (!isRelevant) continue;
 
-    // Essayer film puis série
-    const probePaths = [
-      `/streaming/${slug}/`,
-      `/streaming/series/${slug}/`,
-    ];
+    /* Les pages réelles contiennent un segment genre (/streaming/drame/<slug>/)
+       : les chemins construits /streaming/<slug>/ renvoyaient 404. Le champ
+       `link` de l'API WP donne l'URL exacte. Le contenu du post ne porte pas
+       l'iframe → on fetch la page (non bloquée) pour extraire le lecteur. */
+    const link = (post.link || '').trim();
+    const candidates = link ? [link] : [];
+    if (link && !/\/series\//.test(link)) candidates.push(link.replace(/\/streaming\//, '/streaming/series/'));
 
-    for (const p of probePaths) {
+    for (const p of candidates) {
       const html = await fetchText(p, { timeout: TIMEOUTS.SEARCH });
       if (html && html.length > 200) {
         const iframeUrl = extractIframeUrl(html);
@@ -378,8 +386,15 @@ async function extractMovie(tmdbId, titles, subType) {
 
       console.log(`[Wookafr] Iframe: ${iframeUrl} [${lang}]`)
       const stream = toStream(iframeUrl, lang, 'Wookafr', SITE.BASE_URL, { quality, subType })
-      const resolved = await withTimeout(resolveStream(stream), 8000)
-      if (resolved && resolved.url) return [{ ...resolved, provider: 'wookafr' }]
+      try {
+        const resolved = await withTimeout(resolveStream(stream), 8000)
+        if (resolved && resolved.url) return [{ ...resolved, provider: 'wookafr' }]
+      } catch (resolveErr) {
+        console.warn(`[Wookafr] Resolve timeout: ${resolveErr.message}`)
+      }
+      /* Résolution HLS impossible : l'embed reste lisible par le front
+         (type iframe) — mieux que 0 flux. */
+      return [{ ...stream, provider: 'wookafr' }]
   } catch (e) {
     console.warn(`[Wookafr] Movie extraction failed: ${e.message}`)
   }
@@ -408,8 +423,13 @@ async function extractSeries(tmdbId, mediaType, titles, season, episode, subType
         const lang = detectLanguage(match.url, seriesHtml)
         const quality = detectQuality(iframeUrl, match.title)
         const stream = toStream(iframeUrl, lang, 'Wookafr', SITE.BASE_URL, { quality, subType })
-        const resolved = await withTimeout(resolveStream(stream), 8000)
-        if (resolved && resolved.url) return [{ ...resolved, provider: 'wookafr' }]
+        try {
+          const resolved = await withTimeout(resolveStream(stream), 8000)
+          if (resolved && resolved.url) return [{ ...resolved, provider: 'wookafr' }]
+        } catch (resolveErr) {
+          console.warn(`[Wookafr] Resolve timeout: ${resolveErr.message}`)
+        }
+        return [{ ...stream, provider: 'wookafr' }]
       }
       return []
     }
