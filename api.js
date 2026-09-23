@@ -369,6 +369,10 @@ async function getProviderStreams(provider, query) {
     }
 }
 
+/* Cache de succès par (type, tmdbId, saison/épisode) : quand une requête /api/streams
+   n'a rien trouvé dans la fenêtre de deadline, on retient la promesse du fond pour
+   servir le résultat dès le rappel suivant. */
+const streamSuccessCache = new Map();
 async function handleApiRequest(req, res, url) {
     if (req.method !== 'GET') {
         return json(res, 405, { error: 'Méthode non autorisée.' });
@@ -409,21 +413,57 @@ async function handleApiRequest(req, res, url) {
            CONCURRENCE : lancer 18 scrapers en parallèle sature le CPU des petits
            conteneurs Railway → tous dépassent la deadline. Un pool limite le
            nombre de sites interrogés simultanément pour que les rapides finissent. */
+        /* Cache de fond : si une requête précédente pour le même média n'a pas eu
+           le temps de répondre, ses scrapers ont continué en arrière-plan. On sert
+           d'abord leurs résultats tardifs (rappel quasi instantané). */
+        const cacheKey = `streams:${query.mediaType}:${query.tmdbId}:${query.season || ''}x${query.episode || ''}`;
+        const cached = streamSuccessCache.get(cacheKey);
+        if (cached) {
+            await Promise.race([cached.done, new Promise(resolve => setTimeout(resolve, 2500))]);
+            const cachedStreams = cached.results.flatMap(result => (result && result.streams) || []);
+            if (cachedStreams.length) {
+                const streams = await withGlobalDeadline(finalizeStreams(cachedStreams), GLOBAL_TIMEOUT_MS, cachedStreams);
+                return json(res, 200, {
+                    language: 'fr',
+                    query,
+                    provider: requested,
+                    total: streams.length,
+                    streams,
+                    hosters: streams.map(hosterFromStream),
+                    providers: cached.results.map(result => ({
+                        id: result.provider.id,
+                        name: result.provider.name,
+                        status: result.status,
+                        count: result.streams.length,
+                        error: result.error,
+                    })),
+                });
+            }
+        }
         const startedAt = Date.now();
         const providerDeadline = Math.max(5000, GLOBAL_TIMEOUT_MS - 5000); // réserve du temps pour la finalisation
-        const MAX_CONCURRENCY = Number(process.env.API_MAX_CONCURRENCY || 4);
+        const MAX_CONCURRENCY = Number(process.env.API_MAX_CONCURRENCY || 8);
         const results = [];
+        const backgrounds = [];
         const pending = new Set();
         const queue = [...selected];
         const launches = [];
+        let doneResolve;
+        const done = new Promise(resolve => { doneResolve = resolve; });
+        streamSuccessCache.set(cacheKey, { at: Date.now(), results, done });
+        if (streamSuccessCache.size > 200) streamSuccessCache.delete(streamSuccessCache.keys().next().value);
         while (queue.length || pending.size) {
             while (queue.length && pending.size < MAX_CONCURRENCY) {
                 const provider = queue.shift();
                 /* Deadline ABSOLUE : un provider lancé tardivement hérite du temps
                    restant, jamais d'un créneau complet (sinon on dépasse la borne). */
                 const remainingForProvider = Math.max(2000, startedAt + providerDeadline - Date.now());
-                const task = withGlobalDeadline(getProviderStreams(provider, query), remainingForProvider, null)
-                    .then(result => { if (result) results.push(result); })
+                /* Le scraping réel continue en arrière-plan et alimente `results`
+                   même après la deadline → récupéré par le prochain rappel (cache). */
+                const real = getProviderStreams(provider, query).then(result => { results.push(result); return result; });
+                backgrounds.push(real);
+                const task = withGlobalDeadline(real, remainingForProvider, null)
+                    .catch(() => null)
                     .finally(() => { pending.delete(task); });
                 pending.add(task);
                 launches.push(task);
@@ -431,6 +471,7 @@ async function handleApiRequest(req, res, url) {
             if (pending.size) await Promise.race(pending);
         }
         await Promise.all(launches);
+        doneResolve(Promise.all(backgrounds).catch(() => []));
         /* Les providers encore en cours au moment de la deadline sont marqués timeout. */
         const doneIds = new Set(results.map(result => result.provider.id));
         const timedOut = selected
