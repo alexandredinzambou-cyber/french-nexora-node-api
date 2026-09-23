@@ -405,13 +405,32 @@ async function handleApiRequest(req, res, url) {
 
         if (!selected.length) return json(res, 404, { error: `Provider inconnu: ${requested}` });
 
-        /* Course INDIVIDUELLE par provider contre la deadline : les providers
-           rapides gardent leurs résultats même si d'autres traînent. */
+        /* Course INDIVIDUELLE par provider contre la deadline, avec LIMITATION DE
+           CONCURRENCE : lancer 18 scrapers en parallèle sature le CPU des petits
+           conteneurs Railway → tous dépassent la deadline. Un pool limite le
+           nombre de sites interrogés simultanément pour que les rapides finissent. */
         const startedAt = Date.now();
         const providerDeadline = Math.max(5000, GLOBAL_TIMEOUT_MS - 5000); // réserve du temps pour la finalisation
-        const results = (await Promise.all(
-            selected.map(provider => withGlobalDeadline(getProviderStreams(provider, query), providerDeadline, null))
-        )).filter(Boolean);
+        const MAX_CONCURRENCY = Number(process.env.API_MAX_CONCURRENCY || 4);
+        const results = [];
+        const pending = new Set();
+        const queue = [...selected];
+        const launches = [];
+        while (queue.length || pending.size) {
+            while (queue.length && pending.size < MAX_CONCURRENCY) {
+                const provider = queue.shift();
+                /* Deadline ABSOLUE : un provider lancé tardivement hérite du temps
+                   restant, jamais d'un créneau complet (sinon on dépasse la borne). */
+                const remainingForProvider = Math.max(2000, startedAt + providerDeadline - Date.now());
+                const task = withGlobalDeadline(getProviderStreams(provider, query), remainingForProvider, null)
+                    .then(result => { if (result) results.push(result); })
+                    .finally(() => { pending.delete(task); });
+                pending.add(task);
+                launches.push(task);
+            }
+            if (pending.size) await Promise.race(pending);
+        }
+        await Promise.all(launches);
         /* Les providers encore en cours au moment de la deadline sont marqués timeout. */
         const doneIds = new Set(results.map(result => result.provider.id));
         const timedOut = selected
