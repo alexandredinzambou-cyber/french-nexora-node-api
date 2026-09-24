@@ -407,9 +407,14 @@ async function handleApiRequest(req, res, url) {
         if (query.error) return json(res, 400, { error: query.error });
 
         const requested = providerMatch ? providerMatch[1] : (url.searchParams.get('provider') || 'all');
-        const selected = requested === 'all'
+        /* Liste de providers acceptée ('a,b,c') : le front veut un panier rapide
+           (frenchstream + wookafr + movix…) sans demander 'all' (18 scrapers
+           en parallèle saturaient le conteneur et dépassaient la gateway). */
+        const requestedIds = requested === 'all' ? ['all']
+            : requested.split(',').map(id => id.trim()).filter(Boolean);
+        const selected = requestedIds.includes('all')
             ? [...providers.values()].filter(candidate => candidate.supportedTypes?.includes(query.mediaType))
-            : [providers.get(requested)].filter(Boolean);
+            : requestedIds.map(id => providers.get(id)).filter(Boolean);
 
         if (!selected.length) return json(res, 404, { error: `Provider inconnu: ${requested}` });
 
